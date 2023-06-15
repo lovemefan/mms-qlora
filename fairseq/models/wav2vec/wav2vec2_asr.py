@@ -16,7 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from omegaconf import II, MISSING, open_dict
+from omegaconf import II, MISSING, open_dict, DictConfig
 
 from fairseq import checkpoint_utils, tasks, utils
 from fairseq.dataclass import FairseqDataclass
@@ -253,6 +253,18 @@ class Wav2VecCtc(BaseFairseqModel):
 
         return logits
 
+    def remove_pretraining_modules(self, last_layer=None):
+        self.w2v_encoder.quantizer = None
+        self.w2v_encoder.project_q = None
+        self.w2v_encoder.target_glu = None
+        self.w2v_encoder.final_proj = None
+
+        if last_layer is not None:
+            self.encoder.layers = nn.ModuleList(
+                l for i, l in enumerate(self.encoder.layers) if i <= last_layer
+            )
+
+
     def get_normalized_probs(self, net_output, log_probs):
         """Get normalized probabilities (or log probs) from a net's output."""
 
@@ -453,7 +465,10 @@ class Wav2VecEncoder(FairseqEncoder):
             task = tasks.setup_task(w2v_args.task, from_checkpoint=True)
             model = task.build_model(w2v_args.model, from_checkpoint=True)
             model.remove_pretraining_modules()
-            d = w2v_args.model.encoder_embed_dim
+            if w2v_args.model.get('encoder_embed_dim', None):
+                d = w2v_args.model.encoder_embed_dim
+            else:
+                d = w2v_args.model.w2v_args.model.encoder_embed_dim
         else:
             assert cfg.normalize
 
@@ -578,7 +593,8 @@ class Wav2VecEncoder(FairseqEncoder):
                         del state["model"][k]
 
             print(model)
-            model.load_state_dict(state["model"], strict=True)
+            model.load_state_dict(state["model"], strict=False)
+
 
     def set_num_updates(self, num_updates):
         """Set the number of parameters updates."""

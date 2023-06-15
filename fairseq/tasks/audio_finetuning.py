@@ -8,6 +8,7 @@
 import logging
 import os
 
+from examples.mms.asr.util.quantization_config import BitsAndBytesConfig
 from examples.mms.asr.util.utils import _replace_with_bnb_linear
 from fairseq.data.multi_corpus_dataset import MultiCorpusDataset
 import torch
@@ -120,13 +121,10 @@ class QuantAudioFinetuningConfig(AudioFinetuningConfig):
     )
 
     quantization: bool = field(
-        default=False,
+        default=True,
         metadata={"help": "Finetune the entire model without adapters."}
     )
-    modules_to_not_convert: List = field(
-        default=['proj'],
-        metadata={"help": "Finetune the entire model without adapters."}
-    )
+
     adam8bit: bool = field(
         default=False,
         metadata={"help": "Use 8-bit adam."}
@@ -311,7 +309,7 @@ class AudioFinetuningTask(AudioPretrainingTask):
 
         if self.cfg.quantization:
             model, has_been_replaced = _replace_with_bnb_linear(
-                model, self.cfg.modules_to_not_convert, None, quantization_config
+                model, ['w2v_encoder.proj'], None, BitsAndBytesConfig()
             )
 
         if self.cfg.eval_wer and self.cfg.autoregressive:
