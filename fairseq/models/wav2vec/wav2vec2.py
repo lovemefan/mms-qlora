@@ -1314,6 +1314,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
 
         if self.layer_norm_first:
             x = self.self_attn_layer_norm(x)
+            self.self_attn._set_skip_embed_dim_check()
             x, attn = self.self_attn(
                 query=x,
                 key=x,
