@@ -11,7 +11,7 @@ import re
 from argparse import Namespace
 from dataclasses import dataclass, field
 from typing import Any, Optional
-
+import bitsandbytes as bnb
 import numpy as np
 import torch
 import torch.nn as nn
@@ -199,6 +199,54 @@ class Wav2Vec2AsrConfig(FairseqDataclass):
         default=None,
     )
 
+    # quantization configure
+    full_finetune: bool = field(
+        default=False,
+        metadata={"help": "Finetune the entire model without adapters."}
+    )
+
+    is_quantized: bool = field(
+        default=True,
+        metadata={"help": "Finetune the entire model without adapters."}
+    )
+
+    adam8bit: bool = field(
+        default=False,
+        metadata={"help": "Use 8-bit adam."}
+    )
+    double_quant: bool = field(
+        default=True,
+        metadata={"help": "Compress the quantization statistics through double quantization."}
+    )
+    quant_type: str = field(
+        default="nf4",
+        metadata={"help": "Quantization data type to use. Should be one of `fp4` or `nf4`."}
+    )
+    bits: int = field(
+        default=4,
+        metadata={"help": "How many bits to use."}
+    )
+    lora_r: int = field(
+        default=64,
+        metadata={"help": "Lora R dimension."}
+    )
+    lora_alpha: float = field(
+        default=16,
+        metadata={"help": " Lora alpha."}
+    )
+    lora_dropout: float = field(
+        default=0.0,
+        metadata={"help": "Lora dropout."}
+    )
+    max_memory_MB: int = field(
+        default=80000,
+        metadata={"help": "Free memory per gpu."}
+    )
+    report_to: str = field(
+        default='none',
+        metadata={"help": "To use wandb or something else for reporting."}
+    )
+
 @dataclass
 class Wav2Vec2CtcConfig(Wav2Vec2AsrConfig):
     blank_weight: float = 0
@@ -278,6 +326,27 @@ class Wav2VecCtc(BaseFairseqModel):
     def forward(self, **kwargs):
         x = self.w2v_encoder(**kwargs)
         return x
+
+    def to(self, device):
+        try:
+            self.requires_grad_()
+        except Exception as e:
+            print(e)
+        return self
+        # for param_name in self.state_dict().keys():
+        #     module = self
+        #     if "." in param_name:
+        #         splits = param_name.split(".")
+        #         for split in splits[:-1]:
+        #             new_module = getattr(module, split)
+        #             if new_module is None:
+        #                 raise ValueError(f"{module} has no attribute {split}.")
+        #             module = new_module
+        #         tensor_name = splits[-1]
+        #
+        #     if not isinstance(module, bnb.nn.Params4bit):
+        #         module._parameters[tensor_name] = module.to(device)
+
 
 
 @dataclass
