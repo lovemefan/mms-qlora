@@ -8,6 +8,8 @@ import logging
 from fairseq.modules.quantization import pq, quantization_options, scalar
 from omegaconf import DictConfig
 
+from fairseq.modules.quantization.nf4.quantization_config import BitsAndBytesConfig
+from fairseq.modules.quantization.nf4.utils import _replace_with_bnb_linear, set_module_quantized_tensor_to_device
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,14 @@ def quantize_model_scalar(model, model_cfg: DictConfig):
     if quant_noise_scalar > 0:
         # quantize_model edits the model in place
         scalar.quantize_model_(model, p=quant_noise_scalar, bits=8, update_step=1000)
+
+    if model_cfg.get('is_quantized', None):
+        state_dict = model.state_dict()
+        model, has_been_replaced = _replace_with_bnb_linear(
+            model, ['w2v_encoder.proj'], None, BitsAndBytesConfig()
+        )
+        set_module_quantized_tensor_to_device(model, state_dict)
+
     return model
 
 
