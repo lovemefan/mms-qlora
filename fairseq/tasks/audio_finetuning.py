@@ -8,15 +8,13 @@
 import logging
 import os
 
-from examples.mms.asr.util.quantization_config import BitsAndBytesConfig
-from examples.mms.asr.util.utils import _replace_with_bnb_linear
 from fairseq.data.multi_corpus_dataset import MultiCorpusDataset
 import torch
 import json
 
 from argparse import Namespace
 from dataclasses import dataclass, field
-from typing import Optional, Any, OrderedDict, List
+from typing import Optional, Any, OrderedDict
 
 from fairseq.data import AddTargetDataset, Dictionary, encoders
 from fairseq.tasks.audio_pretraining import AudioPretrainingTask, AudioPretrainingConfig
@@ -27,7 +25,7 @@ from fairseq.data.text_compressor import TextCompressor, TextCompressionLevel
 from . import register_task
 from .. import utils
 from ..logging import metrics
-
+import bitsandbytes as bnb
 
 logger = logging.getLogger(__name__)
 
@@ -112,66 +110,16 @@ class AudioFinetuningConfig(AudioPretrainingConfig):
         }
     )
 
-@dataclass
-class QuantAudioFinetuningConfig(AudioFinetuningConfig):
 
-    full_finetune: bool = field(
-        default=False,
-        metadata={"help": "Finetune the entire model without adapters."}
-    )
-
-    quantization: bool = field(
-        default=True,
-        metadata={"help": "Finetune the entire model without adapters."}
-    )
-
-    adam8bit: bool = field(
-        default=False,
-        metadata={"help": "Use 8-bit adam."}
-    )
-    double_quant: bool = field(
-        default=True,
-        metadata={"help": "Compress the quantization statistics through double quantization."}
-    )
-    quant_type: str = field(
-        default="nf4",
-        metadata={"help": "Quantization data type to use. Should be one of `fp4` or `nf4`."}
-    )
-    bits: int = field(
-        default=4,
-        metadata={"help": "How many bits to use."}
-    )
-    lora_r: int = field(
-        default=64,
-        metadata={"help": "Lora R dimension."}
-    )
-    lora_alpha: float = field(
-        default=16,
-        metadata={"help": " Lora alpha."}
-    )
-    lora_dropout: float = field(
-        default=0.0,
-        metadata={"help": "Lora dropout."}
-    )
-    max_memory_MB: int = field(
-        default=80000,
-        metadata={"help": "Free memory per gpu."}
-    )
-    report_to: str = field(
-        default='none',
-        metadata={"help": "To use wandb or something else for reporting."}
-    )
-
-
-@register_task("audio_finetuning", dataclass=QuantAudioFinetuningConfig)
+@register_task("audio_finetuning", dataclass=AudioFinetuningConfig)
 class AudioFinetuningTask(AudioPretrainingTask):
     """ """
 
-    cfg: QuantAudioFinetuningConfig
+    cfg: AudioFinetuningConfig
 
     def __init__(
         self,
-        cfg: QuantAudioFinetuningConfig,
+        cfg: AudioFinetuningConfig,
     ):
         super().__init__(cfg)
         self.blank_symbol = "<s>"
@@ -189,7 +137,7 @@ class AudioFinetuningTask(AudioPretrainingTask):
         return None
 
     def load_dataset(
-        self, split: str, task_cfg: QuantAudioFinetuningConfig = None, **kwargs
+        self, split: str, task_cfg: AudioFinetuningConfig = None, **kwargs
     ):
         super().load_dataset(split, task_cfg, **kwargs)
 
@@ -306,11 +254,6 @@ class AudioFinetuningTask(AudioPretrainingTask):
 
     def build_model(self, model_cfg: FairseqDataclass, from_checkpoint=False):
         model = super().build_model(model_cfg, from_checkpoint)
-
-        if self.cfg.quantization:
-            model, has_been_replaced = _replace_with_bnb_linear(
-                model, ['w2v_encoder.proj'], None, BitsAndBytesConfig()
-            )
 
         if self.cfg.eval_wer and self.cfg.autoregressive:
             self.sequence_generator = self.build_generator(
