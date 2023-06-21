@@ -28,7 +28,7 @@ from fairseq.models import (
     FairseqIncrementalDecoder,
     register_model,
 )
-from fairseq.models.wav2vec.wav2vec2 import MASKING_DISTRIBUTION_CHOICES, LAYER_TYPE_CHOICES, AdapterFast
+from fairseq.models.wav2vec.wav2vec2 import MASKING_DISTRIBUTION_CHOICES, LAYER_TYPE_CHOICES, AdapterFast, Wav2Vec2Model
 from fairseq.modules import LayerNorm, PositionalEmbedding, TransformerDecoderLayer
 from fairseq.tasks import FairseqTask
 
@@ -333,19 +333,6 @@ class Wav2VecCtc(BaseFairseqModel):
         except Exception as e:
             print(e)
         return self
-        # for param_name in self.state_dict().keys():
-        #     module = self
-        #     if "." in param_name:
-        #         splits = param_name.split(".")
-        #         for split in splits[:-1]:
-        #             new_module = getattr(module, split)
-        #             if new_module is None:
-        #                 raise ValueError(f"{module} has no attribute {split}.")
-        #             module = new_module
-        #         tensor_name = splits[-1]
-        #
-        #     if not isinstance(module, bnb.nn.Params4bit):
-        #         module._parameters[tensor_name] = module.to(device)
 
 
 
@@ -533,6 +520,8 @@ class Wav2VecEncoder(FairseqEncoder):
             w2v_args.task.data = cfg.data
             task = tasks.setup_task(w2v_args.task, from_checkpoint=True)
             model = task.build_model(w2v_args.model, from_checkpoint=True)
+            if not isinstance(model, Wav2Vec2Model):
+                model = model.w2v_encoder.w2v_model
             model.remove_pretraining_modules()
             if w2v_args.model.get('encoder_embed_dim', None):
                 d = w2v_args.model.encoder_embed_dim
